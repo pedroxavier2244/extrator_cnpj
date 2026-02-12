@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# runtime data
+data/raw/
+data/processed/
+data/staging/
+
+# local scripts
+*.log

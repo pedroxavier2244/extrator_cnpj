@@ -1,0 +1,11 @@
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.database import Base
+
+
+class Natureza(Base):
+    __tablename__ = "naturezas"
+
+    codigo: Mapped[str] = mapped_column(String, primary_key=True)
+    descricao: Mapped[str] = mapped_column(String, nullable=False)

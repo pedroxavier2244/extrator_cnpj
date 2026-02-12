@@ -1,0 +1,9 @@
+﻿fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+pydantic-settings
+psycopg2-binary
+pandas
+structlog
+

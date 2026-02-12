@@ -1,0 +1,39 @@
+﻿version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: cnpj_postgres
+    environment:
+      POSTGRES_DB: cnpj
+      POSTGRES_USER: cnpj
+      POSTGRES_PASSWORD: cnpj
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    image: python:3.11-slim
+    container_name: cnpj_api
+    working_dir: /app
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql+psycopg2://cnpj:cnpj@postgres:5432/cnpj
+      RAW_DATA_PATH: data/raw
+      STAGING_PATH: data/staging
+      PROCESSED_PATH: data/processed
+      BATCH_SIZE: "50000"
+      LOG_LEVEL: INFO
+      API_V1_PREFIX: /api/v1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:
