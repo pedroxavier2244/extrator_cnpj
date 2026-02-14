@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
-from etl.utils.postgres_copy import copy_dataframe_to_staging, upsert_from_staging
+from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = ["codigo", "descricao"]
 
@@ -29,7 +29,7 @@ def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
 
 def _ensure_staging_table(engine: Engine, staging_table: str) -> None:
     sql = f"""
-        CREATE TABLE IF NOT EXISTS {staging_table} (
+        CREATE TABLE IF NOT EXISTS {quote_ident(staging_table)} (
             codigo TEXT,
             descricao TEXT
         )

@@ -6,4 +6,5 @@ pydantic-settings
 psycopg2-binary
 pandas
 structlog
+redis>=5.0.0
 

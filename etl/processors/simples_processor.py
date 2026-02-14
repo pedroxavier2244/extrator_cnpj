@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
-from etl.utils.postgres_copy import copy_dataframe_to_staging, upsert_from_staging
+from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = [
     "cnpj_basico",
@@ -59,7 +59,7 @@ def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
 
 def _ensure_staging_table(engine: Engine) -> None:
     sql = f"""
-        CREATE TABLE IF NOT EXISTS {STAGING_TABLE} (
+        CREATE TABLE IF NOT EXISTS {quote_ident(STAGING_TABLE)} (
             cnpj_basico VARCHAR(8),
             opcao_pelo_simples CHAR(1),
             data_opcao_pelo_simples DATE,

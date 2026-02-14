@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel
 
 
@@ -12,6 +14,7 @@ class SocioSchema(BaseModel):
     qualificacao_descricao: str | None = None
     pais: str | None = None
     pais_descricao: str | None = None
+    data_entrada: date | None = None
 
     class Config:
         from_attributes = True

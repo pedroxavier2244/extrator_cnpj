@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import shutil
 import zipfile
-from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import text
 
 from app.config import settings
+from app.core.logging import get_logger
 from app.database import SessionLocal, engine
 from etl.processors.cnaes_processor import process_cnaes_csv
 from etl.processors.empresas_processor import process_empresas_csv
@@ -20,7 +20,9 @@ from etl.processors.paises_processor import process_paises_csv
 from etl.processors.qualificacoes_processor import process_qualificacoes_csv
 from etl.processors.simples_processor import process_simples_csv
 from etl.processors.socios_processor import process_socios_csv
-from etl.utils.file_hash import calculate_sha256
+from etl.utils.file_hash import calculate_file_hash
+
+logger = get_logger(__name__)
 
 REQUIRED_AUXILIARY_TYPES = {
     "cnaes",
@@ -39,100 +41,44 @@ def _ensure_directories() -> None:
     Path(settings.PROCESSED_PATH).mkdir(parents=True, exist_ok=True)
 
 
-@lru_cache(maxsize=1)
-def _has_registros_inseridos_column() -> bool:
+def _already_processed(file_hash: str) -> bool:
     query = text(
         """
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'importacoes'
-          AND column_name = 'registros_inseridos'
+        FROM importacoes
+        WHERE hash_arquivo = :hash_arquivo
+          AND status = 'SUCCESS'
+          AND (
+                COALESCE(registros_processados, 0) > 0
+                OR COALESCE(registros_inseridos, 0) > 0
+              )
         LIMIT 1
         """
     )
-    with engine.begin() as connection:
-        row = connection.execute(query).first()
-    return row is not None
-
-
-def _already_processed(file_hash: str) -> bool:
-    if _has_registros_inseridos_column():
-        query = text(
-            """
-            SELECT 1
-            FROM importacoes
-            WHERE hash_arquivo = :hash_arquivo
-              AND status = 'SUCCESS'
-              AND (
-                    COALESCE(registros_processados, 0) > 0
-                    OR COALESCE(registros_inseridos, 0) > 0
-                  )
-            LIMIT 1
-            """
-        )
-    else:
-        query = text(
-            """
-            SELECT 1
-            FROM importacoes
-            WHERE hash_arquivo = :hash_arquivo
-              AND status = 'SUCCESS'
-              AND COALESCE(registros_processados, 0) > 0
-            LIMIT 1
-            """
-        )
-
     with engine.begin() as connection:
         row = connection.execute(query, {"hash_arquivo": file_hash}).first()
     return row is not None
 
 
 def _create_importacao(nome_arquivo: str, hash_arquivo: str, status: str) -> int:
-    if _has_registros_inseridos_column():
-        query = text(
-            """
-            INSERT INTO importacoes (
-                nome_arquivo,
-                hash_arquivo,
-                status,
-                registros_processados,
-                registros_inseridos
-            )
-            VALUES (
-                :nome_arquivo,
-                :hash_arquivo,
-                :status,
-                :registros_processados,
-                :registros_inseridos
-            )
-            RETURNING id
-            """
+    query = text(
+        """
+        INSERT INTO importacoes (
+            nome_arquivo,
+            hash_arquivo,
+            status,
+            registros_processados,
+            registros_inseridos
         )
-        params = {
-            "nome_arquivo": nome_arquivo,
-            "hash_arquivo": hash_arquivo,
-            "status": status,
-            "registros_processados": 0,
-            "registros_inseridos": 0,
-        }
-    else:
-        query = text(
-            """
-            INSERT INTO importacoes (nome_arquivo, hash_arquivo, status, registros_processados)
-            VALUES (:nome_arquivo, :hash_arquivo, :status, :registros_processados)
-            RETURNING id
-            """
-        )
-        params = {
-            "nome_arquivo": nome_arquivo,
-            "hash_arquivo": hash_arquivo,
-            "status": status,
-            "registros_processados": 0,
-        }
-
+        VALUES (:nome_arquivo, :hash_arquivo, :status, 0, 0)
+        RETURNING id
+        """
+    )
     with SessionLocal() as db:
-        importacao_id = db.execute(query, params).scalar_one()
+        importacao_id = db.execute(
+            query,
+            {"nome_arquivo": nome_arquivo, "hash_arquivo": hash_arquivo, "status": status},
+        ).scalar_one()
         db.commit()
 
     return int(importacao_id)
@@ -144,37 +90,21 @@ def _update_importacao(
     registros_processados: int,
     registros_inseridos: int | None = None,
 ) -> None:
-    if _has_registros_inseridos_column():
-        query = text(
-            """
-            UPDATE importacoes
-            SET status = :status,
-                registros_processados = :registros_processados,
-                registros_inseridos = :registros_inseridos
-            WHERE id = :id
-            """
-        )
-        params = {
-            "id": importacao_id,
-            "status": status,
-            "registros_processados": registros_processados,
-            "registros_inseridos": registros_inseridos if registros_inseridos is not None else registros_processados,
-        }
-    else:
-        query = text(
-            """
-            UPDATE importacoes
-            SET status = :status,
-                registros_processados = :registros_processados
-            WHERE id = :id
-            """
-        )
-        params = {
-            "id": importacao_id,
-            "status": status,
-            "registros_processados": registros_processados,
-        }
-
+    query = text(
+        """
+        UPDATE importacoes
+        SET status = :status,
+            registros_processados = :registros_processados,
+            registros_inseridos = :registros_inseridos
+        WHERE id = :id
+        """
+    )
+    params = {
+        "id": importacao_id,
+        "status": status,
+        "registros_processados": registros_processados,
+        "registros_inseridos": registros_inseridos if registros_inseridos is not None else registros_processados,
+    }
     with SessionLocal() as db:
         db.execute(query, params)
         db.commit()
@@ -236,21 +166,24 @@ def _extract_classified_files(zip_path: Path) -> dict[str, list[Path]]:
                 with archive.open(member, "r") as src, open(nested_zip_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
 
-                with zipfile.ZipFile(nested_zip_path, "r") as nested:
-                    for inner in nested.infolist():
-                        if inner.is_dir():
-                            continue
+                try:
+                    with zipfile.ZipFile(nested_zip_path, "r") as nested:
+                        for inner in nested.infolist():
+                            if inner.is_dir():
+                                continue
 
-                        file_type = _classify_name(inner.filename)
-                        if file_type is None:
-                            continue
+                            file_type = _classify_name(inner.filename)
+                            if file_type is None:
+                                continue
 
-                        inner_name = Path(inner.filename).name
-                        target_path = destination_dir / outer_stem / inner_name
-                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                        with nested.open(inner, "r") as src, open(target_path, "wb") as dst:
-                            shutil.copyfileobj(src, dst)
-                        extracted[file_type].append(target_path)
+                            inner_name = Path(inner.filename).name
+                            target_path = destination_dir / outer_stem / inner_name
+                            target_path.parent.mkdir(parents=True, exist_ok=True)
+                            with nested.open(inner, "r") as src, open(target_path, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+                            extracted[file_type].append(target_path)
+                finally:
+                    nested_zip_path.unlink(missing_ok=True)
                 continue
 
             file_type = _classify_name(member_name)
@@ -271,7 +204,7 @@ def _move_to_processed(zip_path: Path) -> None:
 
 
 def process_zip_file(zip_path: Path, force: bool = False) -> int:
-    file_hash = calculate_sha256(zip_path)
+    file_hash = calculate_file_hash(zip_path, algorithm=settings.ETL_HASH_ALGORITHM)
 
     if not force and _already_processed(file_hash):
         _create_importacao(zip_path.name, file_hash, "IGNORED")
@@ -317,7 +250,11 @@ def process_zip_file(zip_path: Path, force: bool = False) -> int:
 
         missing_aux = sorted(aux for aux in REQUIRED_AUXILIARY_TYPES if not extracted[aux])
         if missing_aux:
-            print(f"arquivo nao encontrado para tipos auxiliares: {', '.join(missing_aux)}")
+            logger.warning(
+                "tipos auxiliares ausentes no arquivo",
+                arquivo=zip_path.name,
+                tipos=missing_aux,
+            )
             _update_importacao(importacao_id, "PARTIAL", total_processed, total_processed)
             _move_to_processed(zip_path)
             return total_processed
@@ -326,7 +263,13 @@ def process_zip_file(zip_path: Path, force: bool = False) -> int:
         _move_to_processed(zip_path)
         return total_processed
     except Exception:
-        _update_importacao(importacao_id, "FAILED", 0, 0)
+        try:
+            _update_importacao(importacao_id, "FAILED", 0, 0)
+        except Exception:
+            logger.exception(
+                "Falha ao atualizar status de importação para FAILED",
+                importacao_id=importacao_id,
+            )
         raise
 
 
@@ -337,7 +280,13 @@ def run(force: bool = False) -> int:
     raw_dir = Path(settings.RAW_DATA_PATH)
 
     for zip_path in sorted(raw_dir.glob("*.zip")):
-        total += process_zip_file(zip_path, force=force)
+        try:
+            total += process_zip_file(zip_path, force=force)
+        except Exception:
+            logger.exception(
+                "Erro ao processar arquivo, continuando com os demais",
+                arquivo=str(zip_path),
+            )
 
     return total
 

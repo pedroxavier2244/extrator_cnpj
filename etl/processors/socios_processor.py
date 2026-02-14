@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
-from etl.utils.postgres_copy import copy_dataframe_to_staging, upsert_from_staging
+from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = [
     "cnpj_basico",
@@ -25,7 +25,7 @@ CSV_COLUMNS = [
 
 DATE_COLUMNS = ["data_entrada"]
 
-INSERT_COLUMNS = ["cnpj_basico", "nome_socio", "cpf_cnpj_socio", "qualificacao", "pais"]
+INSERT_COLUMNS = ["cnpj_basico", "nome_socio", "cpf_cnpj_socio", "qualificacao", "pais", "data_entrada"]
 
 STAGING_TABLE = "stg_socios"
 TARGET_TABLE = "socios"
@@ -56,6 +56,7 @@ def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
             "cpf_cnpj_socio": chunk["cpf_cnpj"],
             "qualificacao": chunk["qualificacao"],
             "pais": chunk["pais"],
+            "data_entrada": chunk["data_entrada"],
         }
     )
     prepared = prepared[prepared["cnpj_basico"].notna()]
@@ -64,12 +65,13 @@ def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
 
 def _ensure_staging_table(engine: Engine) -> None:
     sql = f"""
-        CREATE TABLE IF NOT EXISTS {STAGING_TABLE} (
+        CREATE TABLE IF NOT EXISTS {quote_ident(STAGING_TABLE)} (
             cnpj_basico VARCHAR(8),
             nome_socio TEXT,
             cpf_cnpj_socio TEXT,
             qualificacao TEXT,
-            pais TEXT
+            pais TEXT,
+            data_entrada DATE
         )
     """
     with engine.begin() as connection:

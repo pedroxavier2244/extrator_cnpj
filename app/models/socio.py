@@ -1,4 +1,6 @@
-from sqlalchemy import ForeignKey, Integer, String
+from datetime import date
+
+from sqlalchemy import Date, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -13,3 +15,4 @@ class Socio(Base):
     cpf_cnpj_socio: Mapped[str | None] = mapped_column(String, nullable=True)
     qualificacao: Mapped[str | None] = mapped_column(String, nullable=True)
     pais: Mapped[str | None] = mapped_column(String, nullable=True)
+    data_entrada: Mapped[date | None] = mapped_column(Date, nullable=True)

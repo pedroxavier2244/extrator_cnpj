@@ -6,14 +6,19 @@ import pandas as pd
 from sqlalchemy import Engine, text
 
 
-def _quote_ident(identifier: str) -> str:
+def quote_ident(identifier: str) -> str:
+    """Returns a safely double-quoted SQL identifier."""
     return '"' + identifier.replace('"', '""') + '"'
 
 
+# Keep private alias for internal use
+_quote_ident = quote_ident
+
+
 def _qualified_table_name(schema: str | None, table: str) -> str:
-    quoted_table = _quote_ident(table)
+    quoted_table = quote_ident(table)
     if schema:
-        return f"{_quote_ident(schema)}.{quoted_table}"
+        return f"{quote_ident(schema)}.{quoted_table}"
     return quoted_table
 
 
@@ -47,6 +52,9 @@ def copy_dataframe_to_staging(
     raw_connection = engine.raw_connection()
     try:
         with raw_connection.cursor() as cursor:
+            # Truncate staging before each load so stale data from a previous
+            # failed run never mixes with the current batch.
+            cursor.execute(f"TRUNCATE TABLE {table_name}")
             cursor.copy_expert(copy_sql, csv_buffer)
         raw_connection.commit()
     except Exception:
