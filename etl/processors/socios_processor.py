@@ -41,12 +41,14 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 def _normalize_dates(chunk: pd.DataFrame) -> pd.DataFrame:
     for col in DATE_COLUMNS:
         series = chunk[col].astype(str).str.strip()
-        # Try YYYYMMDD first (standard RFB format), then fallback
+        # Try YYYYMMDD first (standard RFB format)
         parsed = pd.to_datetime(series, format="%Y%m%d", errors="coerce")
-        mask = parsed.isna() & series.notna() & (series != "None") & (series != "")
+        mask = parsed.isna() & ~series.isin(["", "None", "nan", "<NA>", "NaT"])
         if mask.any():
             parsed[mask] = pd.to_datetime(series[mask], errors="coerce", dayfirst=False)
-        chunk[col] = parsed.dt.strftime("%Y-%m-%d").where(parsed.notna(), None)
+        # Invalidate dates outside reasonable range (avoids year 21 AD etc.)
+        valid = parsed.notna() & (parsed.dt.year >= 1900) & (parsed.dt.year <= 2100)
+        chunk[col] = parsed.dt.strftime("%Y-%m-%d").where(valid, None)
     return chunk
 
 
