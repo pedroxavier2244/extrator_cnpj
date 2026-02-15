@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EstabelecimentoSchema(BaseModel):
@@ -20,5 +20,4 @@ class EstabelecimentoSchema(BaseModel):
     motivo: str | None = None
     motivo_descricao: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

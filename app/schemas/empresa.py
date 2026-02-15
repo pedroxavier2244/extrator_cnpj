@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EmpresaSchema(BaseModel):
@@ -19,5 +19,4 @@ class EmpresaSchema(BaseModel):
     data_opcao_pelo_mei: date | None = None
     data_exclusao_do_mei: date | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

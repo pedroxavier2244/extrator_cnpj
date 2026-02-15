@@ -1,15 +1,45 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
-*.pyd
-.env
+.Python
+*.egg-info/
+dist/
+build/
+
+# Ambientes virtuais
 .venv/
 venv/
+env/
 
-# runtime data
+# Variaveis de ambiente (NUNCA commitar)
+.env
+
+# Dados ETL (podem ser muito grandes)
 data/raw/
-data/processed/
 data/staging/
+data/processed/
 
-# local scripts
+# Logs
 *.log
+logs/
+/tmp/etl.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage / testes
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Mypy / Ruff cache
+.mypy_cache/
+.ruff_cache/

@@ -1,26 +1,17 @@
 from __future__ import annotations
 
+import os
 import sys
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-sys.path.append("/app")
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.config import settings
 from app.database import Base
-from app.models.cnae import Cnae  # noqa: F401
-from app.models.empresa import Empresa  # noqa: F401
-from app.models.estabelecimento import Estabelecimento  # noqa: F401
-from app.models.importacao import Importacao  # noqa: F401
-from app.models.motivo import Motivo  # noqa: F401
-from app.models.municipio import Municipio  # noqa: F401
-from app.models.natureza import Natureza  # noqa: F401
-from app.models.pais import Pais  # noqa: F401
-from app.models.qualificacao import Qualificacao  # noqa: F401
-from app.models.simples import Simples  # noqa: F401
-from app.models.socio import Socio  # noqa: F401
+import app.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

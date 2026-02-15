@@ -10,7 +10,7 @@ docker exec -i cnpj_api python -m alembic -c /app/alembic.ini upgrade head
 if errorlevel 1 goto :error
 
 echo [3/7] Limpando importacoes travadas (PROCESSING -> FAILED)...
-docker exec -i cnpj_postgres psql -U cnpj -d cnpj -c "update importacoes set status='FAILED' where status='PROCESSING';"
+docker exec -i cnpj_postgres psql -U cnpj_user -d cnpj -c "update importacoes set status='FAILED' where status='PROCESSING';"
 if errorlevel 1 goto :error
 
 echo [4/7] Garantindo ZIP em /app/data/raw...
@@ -22,11 +22,11 @@ docker exec -i cnpj_api python -m etl.orchestrator --force
 if errorlevel 1 goto :error
 
 echo [6/7] Verificando status das importacoes...
-docker exec -i cnpj_postgres psql -U cnpj -d cnpj -c "select id,nome_arquivo,status,registros_processados,registros_inseridos from importacoes order by id desc limit 10;"
+docker exec -i cnpj_postgres psql -U cnpj_user -d cnpj -c "select id,nome_arquivo,status,registros_processados,registros_inseridos from importacoes order by id desc limit 10;"
 if errorlevel 1 goto :error
 
 echo [7/7] Verificando contagem das tabelas auxiliares...
-docker exec -i cnpj_postgres psql -U cnpj -d cnpj -c "select 'cnaes' as tabela,count(*) as total from cnaes union all select 'motivos',count(*) from motivos union all select 'municipios',count(*) from municipios union all select 'naturezas',count(*) from naturezas union all select 'paises',count(*) from paises union all select 'qualificacoes',count(*) from qualificacoes union all select 'simples',count(*) from simples;"
+docker exec -i cnpj_postgres psql -U cnpj_user -d cnpj -c "select 'cnaes' as tabela,count(*) as total from cnaes union all select 'motivos',count(*) from motivos union all select 'municipios',count(*) from municipios union all select 'naturezas',count(*) from naturezas union all select 'paises',count(*) from paises union all select 'qualificacoes',count(*) from qualificacoes union all select 'simples',count(*) from simples;"
 if errorlevel 1 goto :error
 
 echo.

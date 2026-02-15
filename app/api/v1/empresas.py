@@ -1,6 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import math
+
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -11,13 +13,33 @@ from app.schemas.empresa import EmpresaSchema
 router = APIRouter(prefix="/empresas", tags=["empresas"])
 
 
-@router.get("/search", response_model=EmpresasSearchResponse)
+@router.get(
+    "/search",
+    response_model=EmpresasSearchResponse,
+    summary="Buscar empresas",
+    description="Busca empresas por razao social usando full-text search com paginacao.",
+)
 def search_empresas(
-    q: str = Query(..., min_length=1),
-    limit: int = Query(20, ge=1, le=100),
+    response: Response,
+    q: str = Query(..., min_length=1, description="Termo de busca para razao social"),
+    page: int = Query(1, ge=1, description="Pagina atual"),
+    page_size: int = Query(20, ge=1, le=100, description="Quantidade de itens por pagina"),
     db: Session = Depends(get_db),
 ) -> EmpresasSearchResponse:
-    sql = text(
+    response.headers["Cache-Control"] = "public, max-age=300"
+
+    offset = (page - 1) * page_size
+
+    count_sql = text(
+        """
+        SELECT COUNT(*) AS total
+        FROM empresas e
+        WHERE to_tsvector('portuguese', coalesce(e.razao_social, ''))
+              @@ plainto_tsquery('portuguese', :q)
+        """
+    )
+
+    data_sql = text(
         """
         SELECT
             e.cnpj_basico,
@@ -34,9 +56,20 @@ def search_empresas(
               @@ plainto_tsquery('portuguese', :q)
         ORDER BY relevancia DESC, e.razao_social ASC
         LIMIT :limit
+        OFFSET :offset
         """
     )
 
-    rows = db.execute(sql, {"q": q, "limit": limit}).mappings().all()
+    total = int(db.execute(count_sql, {"q": q}).scalar() or 0)
+    rows = db.execute(data_sql, {"q": q, "limit": page_size, "offset": offset}).mappings().all()
     resultados = [EmpresaSchema(**dict(row)) for row in rows]
-    return EmpresasSearchResponse(resultados=resultados)
+
+    pages = math.ceil(total / page_size) if total > 0 else 0
+
+    return EmpresasSearchResponse(
+        resultados=resultados,
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+    )

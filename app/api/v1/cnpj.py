@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import re
-import json
 from collections import defaultdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.cache import get_cache
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.database import get_db
 from app.schemas.api_responses import BatchCNPJRequest, BatchCNPJResponse, CNPJResponse
@@ -42,24 +42,25 @@ def _cnpj_response_from_rows(
     )
 
 
-def _model_dump(model: Any) -> dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return model.model_dump(mode="json")
-    return json.loads(model.json())
+@router.get(
+    "/{cnpj}",
+    response_model=CNPJResponse,
+    summary="Consultar CNPJ",
+    description=(
+        "Retorna dados completos de empresa, estabelecimentos e socios. "
+        "Aceita CNPJ com 8 digitos (raiz) ou 14 digitos (completo)."
+    ),
+)
+def get_cnpj(
+    cnpj: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> CNPJResponse:
+    response.headers["Cache-Control"] = "public, max-age=3600"
 
-
-def _model_validate_cnpj_response(data: dict[str, Any]) -> CNPJResponse:
-    if hasattr(CNPJResponse, "model_validate"):
-        return CNPJResponse.model_validate(data)
-    return CNPJResponse.parse_obj(data)
-
-
-@router.get("/{cnpj}", response_model=CNPJResponse)
-def get_cnpj(cnpj: str, db: Session = Depends(get_db)) -> CNPJResponse:
     cnpj_digits = _only_digits(cnpj)
-
     if len(cnpj_digits) not in (8, 14):
-        raise HTTPException(status_code=400, detail="CNPJ deve ter 8 ou 14 digitos")
+        raise ValidationError("CNPJ deve ter 8 ou 14 digitos")
 
     cnpj_basico = cnpj_digits[:8]
 
@@ -166,7 +167,7 @@ def get_cnpj(cnpj: str, db: Session = Depends(get_db)) -> CNPJResponse:
     socios = [SocioSchema(**dict(row)) for row in socio_rows]
 
     if empresa is None and not estabelecimentos and not socios:
-        raise HTTPException(status_code=404, detail="CNPJ nao encontrado")
+        raise NotFoundError("CNPJ nao encontrado")
 
     return CNPJResponse(
         empresa=empresa,
@@ -175,7 +176,12 @@ def get_cnpj(cnpj: str, db: Session = Depends(get_db)) -> CNPJResponse:
     )
 
 
-@router.post("/batch", response_model=BatchCNPJResponse)
+@router.post(
+    "/batch",
+    response_model=BatchCNPJResponse,
+    summary="Consultar CNPJs em lote",
+    description="Retorna resultados para ate 1000 CNPJs em uma unica chamada.",
+)
 def get_cnpj_batch(
     request: BatchCNPJRequest,
     db: Session = Depends(get_db),
@@ -213,7 +219,7 @@ def get_cnpj_batch(
         if payload is None:
             continue
         try:
-            found_by_basico[basico] = _model_validate_cnpj_response(cache.deserialize(payload))
+            found_by_basico[basico] = CNPJResponse.model_validate(cache.deserialize(payload))
         except Exception:
             logger.exception("batch.cache_deserialize_failed", cnpj_basico=basico)
 
@@ -328,7 +334,7 @@ def get_cnpj_batch(
             if response.empresa is None and not response.estabelecimentos and not response.socios:
                 continue
             found_by_basico[basico] = response
-            cache_to_set[cache.key(basico)] = cache.serialize(_model_dump(response))
+            cache_to_set[cache.key(basico)] = cache.serialize(response.model_dump(mode="json"))
 
         cache.set_many(cache_to_set, settings.CACHE_TTL_SECONDS)
 
@@ -337,11 +343,11 @@ def get_cnpj_batch(
         basico = basico_by_input.get(original)
         if basico is None:
             continue
-        response = found_by_basico.get(basico)
-        if response is None:
+        batch_response = found_by_basico.get(basico)
+        if batch_response is None:
             nao_encontrados.append(original)
             continue
-        resultados[original] = response
+        resultados[original] = batch_response
 
     return BatchCNPJResponse(
         resultados=resultados,

@@ -1,13 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from functools import lru_cache
 
-try:
-    from pydantic_settings import BaseSettings, SettingsConfigDict
-except ImportError:  # pydantic v1 fallback
-    from pydantic import BaseSettings
-
-    SettingsConfigDict = None
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -26,19 +21,14 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     APP_NAME: str = "Sistema CNPJ"
     ETL_HASH_ALGORITHM: str = "sha256"
+    CORS_ORIGINS: list[str] = ["*"]
 
-    if SettingsConfigDict is not None:
-        model_config = SettingsConfigDict(
-            env_file=".env",
-            env_file_encoding="utf-8",
-            case_sensitive=False,
-            extra="ignore",
-        )
-    else:
-        class Config:
-            env_file = ".env"
-            env_file_encoding = "utf-8"
-            case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
 
 @lru_cache

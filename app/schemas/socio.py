@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SocioSchema(BaseModel):
@@ -16,5 +16,4 @@ class SocioSchema(BaseModel):
     pais_descricao: str | None = None
     data_entrada: date | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

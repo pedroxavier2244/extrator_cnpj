@@ -6,6 +6,7 @@ from typing import Any
 
 from app.config import settings
 from app.core.logging import get_logger
+from app.core.metrics import increment_cache_hits_total, increment_cache_misses_total
 
 logger = get_logger(__name__)
 
@@ -45,7 +46,11 @@ class CacheBackend:
             return None
         try:
             value = self.client.get(key)
-            return str(value) if value is not None else None
+            if value is None:
+                increment_cache_misses_total()
+                return None
+            increment_cache_hits_total()
+            return str(value)
         except Exception:
             logger.exception("cache.get_failed", key=key)
             return None
@@ -68,9 +73,18 @@ class CacheBackend:
             return {}
 
         found: dict[str, str] = {}
+        misses = 0
         for key, value in zip(keys, values):
             if value is not None:
                 found[key] = str(value)
+            else:
+                misses += 1
+
+        if found:
+            increment_cache_hits_total(len(found))
+        if misses:
+            increment_cache_misses_total(misses)
+
         return found
 
     def set_many(self, mapping: dict[str, str], ttl: int) -> None:
