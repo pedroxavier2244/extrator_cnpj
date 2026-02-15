@@ -94,10 +94,12 @@ def upsert_from_staging(
     else:
         on_conflict_sql = "DO NOTHING"
 
+    distinct_on_sql = ", ".join(_quote_ident(col) for col in conflict_columns)
     upsert_sql = f"""
         INSERT INTO {qualified_target} ({insert_cols_sql})
-        SELECT {insert_cols_sql}
+        SELECT DISTINCT ON ({distinct_on_sql}) {insert_cols_sql}
         FROM {qualified_staging}
+        ORDER BY {distinct_on_sql}
         ON CONFLICT ({conflict_cols_sql})
         {on_conflict_sql}
     """
