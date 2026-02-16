@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
+from etl.utils.normalize import normalize_date_columns
 from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = [
@@ -67,13 +68,11 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_dates(chunk: pd.DataFrame) -> pd.DataFrame:
-    for col in DATE_COLUMNS:
-        parsed = pd.to_datetime(chunk[col], errors="coerce")
-        chunk[col] = parsed.dt.strftime("%Y-%m-%d").where(parsed.notna(), None)
-    return chunk
+    return normalize_date_columns(chunk, DATE_COLUMNS)
 
 
 def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    chunk = chunk.copy()
     chunk = _normalize_strings(chunk)
     chunk = _normalize_dates(chunk)
 

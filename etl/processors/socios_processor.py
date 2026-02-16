@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
+from etl.utils.normalize import normalize_date_columns
 from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = [
@@ -39,20 +40,11 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_dates(chunk: pd.DataFrame) -> pd.DataFrame:
-    for col in DATE_COLUMNS:
-        series = chunk[col].astype(str).str.strip()
-        # Try YYYYMMDD first (standard RFB format)
-        parsed = pd.to_datetime(series, format="%Y%m%d", errors="coerce")
-        mask = parsed.isna() & ~series.isin(["", "None", "nan", "<NA>", "NaT"])
-        if mask.any():
-            parsed[mask] = pd.to_datetime(series[mask], errors="coerce", dayfirst=False)
-        # Invalidate dates outside reasonable range (avoids year 21 AD etc.)
-        valid = parsed.notna() & (parsed.dt.year >= 1900) & (parsed.dt.year <= 2100)
-        chunk[col] = parsed.dt.strftime("%Y-%m-%d").where(valid, None)
-    return chunk
+    return normalize_date_columns(chunk, DATE_COLUMNS)
 
 
 def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    chunk = chunk.copy()
     chunk = _normalize_strings(chunk)
     chunk = _normalize_dates(chunk)
 
@@ -128,6 +120,11 @@ def process_socios_csv(
             target_table=TARGET_TABLE,
             insert_columns=INSERT_COLUMNS,
             conflict_columns=["cnpj_basico", "nome_socio", "cpf_cnpj_socio"],
+            conflict_expressions=[
+                '"cnpj_basico"',
+                "COALESCE(nome_socio, '')",
+                "COALESCE(cpf_cnpj_socio, '')",
+            ],
         )
         processed += len(prepared)
 

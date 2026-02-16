@@ -8,7 +8,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.cnpj import router as cnpj_router
 from app.api.v1.empresas import router as empresas_router
@@ -19,8 +21,11 @@ from app.core.exceptions import AppError
 from app.core.logging import get_logger, setup_logging
 from app.core.metrics import get_uptime_seconds, increment_db_errors_total, set_startup_time
 from app.database import SessionLocal
+from app.middleware.api_key import APIKeyMiddleware
+from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.schemas.api_responses import ErrorResponse, HealthResponse
 
 APP_VERSION = "1.0.0"
@@ -48,8 +53,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="API de consulta de dados publicos de CNPJ da Receita Federal",
     version=APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
     openapi_tags=[
         {"name": "cnpj", "description": "Consulta de CNPJ individual e em lote"},
         {"name": "empresas", "description": "Busca de empresas por razao social"},
@@ -57,6 +62,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
@@ -64,8 +73,18 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-app.add_middleware(RequestIDMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(
+    APIKeyMiddleware,
+    api_keys=settings.API_KEYS,
+    public_paths={
+        f"{settings.API_V1_PREFIX}/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    },
+)
 
 app.include_router(cnpj_router, prefix=settings.API_V1_PREFIX)
 app.include_router(empresas_router, prefix=settings.API_V1_PREFIX)
@@ -104,7 +123,9 @@ def handle_request_validation_error(request: Request, exc: RequestValidationErro
 
 @app.exception_handler(Exception)
 def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-    increment_db_errors_total()
+    if isinstance(exc, SQLAlchemyError):
+        increment_db_errors_total()
+
     logger.exception("api.unhandled_exception", path=request.url.path)
 
     payload = ErrorResponse(
@@ -123,7 +144,8 @@ def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     summary="Health check",
     description="Verifica disponibilidade de banco, cache e estado geral da API.",
 )
-def health(response: Response) -> HealthResponse:
+@limiter.limit("120/minute")
+def health(request: Request, response: Response) -> HealthResponse:
     cache_backend = get_cache()
 
     if not (cache_backend.redis_url or "").strip():

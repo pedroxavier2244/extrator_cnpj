@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 
 import structlog
@@ -7,11 +8,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        incoming_request_id = request.headers.get("X-Request-ID")
-        request_id = incoming_request_id or str(uuid.uuid4())
+        incoming_request_id = request.headers.get("X-Request-ID", "")
+        request_id = incoming_request_id if UUID_RE.match(incoming_request_id) else str(uuid.uuid4())
 
         request.state.request_id = request_id
         structlog.contextvars.clear_contextvars()

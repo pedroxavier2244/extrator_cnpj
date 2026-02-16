@@ -10,7 +10,7 @@ class Socio(Base):
     __tablename__ = "socios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    cnpj_basico: Mapped[str] = mapped_column(ForeignKey("empresas.cnpj_basico"), nullable=False)
+    cnpj_basico: Mapped[str] = mapped_column(ForeignKey("empresas.cnpj_basico"), nullable=False, index=True)
     nome_socio: Mapped[str | None] = mapped_column(String, nullable=True)
     cpf_cnpj_socio: Mapped[str | None] = mapped_column(String, nullable=True)
     qualificacao: Mapped[str | None] = mapped_column(String, nullable=True)

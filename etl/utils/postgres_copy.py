@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from io import StringIO
 
@@ -40,13 +40,13 @@ def copy_dataframe_to_staging(
         index=False,
         header=False,
         sep=",",
-        na_rep="\\N",
+        na_rep="",
     )
     csv_buffer.seek(0)
 
     copy_sql = (
         f"COPY {table_name} ({', '.join(columns)}) "
-        "FROM STDIN WITH (FORMAT CSV, DELIMITER ',', NULL '\\N')"
+        "FROM STDIN WITH (FORMAT CSV, DELIMITER ',', NULL '')"
     )
 
     raw_connection = engine.raw_connection()
@@ -73,6 +73,7 @@ def upsert_from_staging(
     insert_columns: list[str],
     conflict_columns: list[str],
     schema: str | None = None,
+    conflict_expressions: list[str] | None = None,
 ) -> None:
     if not insert_columns:
         raise ValueError("insert_columns cannot be empty")
@@ -84,7 +85,13 @@ def upsert_from_staging(
     qualified_staging = _qualified_table_name(schema, staging_table)
     qualified_target = _qualified_table_name(schema, target_table)
     insert_cols_sql = ", ".join(_quote_ident(col) for col in insert_columns)
-    conflict_cols_sql = ", ".join(_quote_ident(col) for col in conflict_columns)
+
+    if conflict_expressions:
+        conflict_target_sql = ", ".join(conflict_expressions)
+        distinct_on_sql = conflict_target_sql
+    else:
+        conflict_target_sql = ", ".join(_quote_ident(col) for col in conflict_columns)
+        distinct_on_sql = conflict_target_sql
 
     if update_columns:
         update_set_sql = ", ".join(
@@ -94,13 +101,12 @@ def upsert_from_staging(
     else:
         on_conflict_sql = "DO NOTHING"
 
-    distinct_on_sql = ", ".join(_quote_ident(col) for col in conflict_columns)
     upsert_sql = f"""
         INSERT INTO {qualified_target} ({insert_cols_sql})
         SELECT DISTINCT ON ({distinct_on_sql}) {insert_cols_sql}
         FROM {qualified_staging}
         ORDER BY {distinct_on_sql}
-        ON CONFLICT ({conflict_cols_sql})
+        ON CONFLICT ({conflict_target_sql})
         {on_conflict_sql}
     """
 

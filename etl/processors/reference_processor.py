@@ -20,6 +20,7 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 
 
 def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    chunk = chunk.copy()
     chunk = _normalize_strings(chunk)
     prepared = chunk[CSV_COLUMNS].copy()
     prepared = prepared[prepared["codigo"].notna() & prepared["descricao"].notna()]

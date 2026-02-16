@@ -5,14 +5,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: cnpj
-      POSTGRES_USER: cnpj_user
-      POSTGRES_PASSWORD: cnpj_pass
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cnpj_user -d cnpj"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d cnpj"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +24,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+psycopg2://cnpj_user:cnpj_pass@db:5432/cnpj
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       RAW_DATA_PATH: /data/raw
       STAGING_PATH: /data/staging
       PROCESSED_PATH: /data/processed
@@ -39,6 +41,9 @@ services:
       DB_POOL_SIZE: "5"
       DB_MAX_OVERFLOW: "10"
       DB_POOL_TIMEOUT: "30"
+      API_KEYS: ${API_KEYS}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     volumes:
       - ./data:/data
     depends_on:

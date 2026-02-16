@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:arquivos.receitafederal.gov.br)"
+      "WebFetch(domain:arquivos.receitafederal.gov.br)",
+      "Bash(gh repo view:*)",
+      "Bash(git clone:*)"
     ]
   }
 }

@@ -40,9 +40,12 @@ def set_startup_time(startup_time: float | None = None) -> None:
 
 def get_uptime_seconds() -> float:
     global _STARTUP_TIME
-    if _STARTUP_TIME is None:
-        set_startup_time()
-    return time.monotonic() - (_STARTUP_TIME or time.monotonic())
+    with _STARTUP_LOCK:
+        if _STARTUP_TIME is None:
+            set_startup_time()
+        start = _STARTUP_TIME
+
+    return time.monotonic() - start
 
 
 def get_metrics_store() -> MetricsStore:

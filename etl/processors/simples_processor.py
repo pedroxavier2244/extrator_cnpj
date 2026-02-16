@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 
 from app.config import settings
 from app.database import engine as default_engine
+from etl.utils.normalize import normalize_date_columns
 from etl.utils.postgres_copy import copy_dataframe_to_staging, quote_ident, upsert_from_staging
 
 CSV_COLUMNS = [
@@ -38,21 +39,19 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_dates(chunk: pd.DataFrame) -> pd.DataFrame:
-    for col in DATE_COLUMNS:
-        parsed = pd.to_datetime(chunk[col], format="%Y%m%d", errors="coerce")
-        chunk[col] = parsed.dt.strftime("%Y-%m-%d").where(parsed.notna(), None)
-    return chunk
+    return normalize_date_columns(chunk, DATE_COLUMNS)
 
 
 def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    chunk = chunk.copy()
     chunk = _normalize_strings(chunk)
     chunk = _normalize_dates(chunk)
 
-    chunk["cnpj_basico"] = chunk["cnpj_basico"].str.zfill(8)
-    chunk.loc[chunk["cnpj_basico"].str.len() != 8, "cnpj_basico"] = None
+    mask = chunk["cnpj_basico"].notna()
+    chunk.loc[mask, "cnpj_basico"] = chunk.loc[mask, "cnpj_basico"].str.zfill(8)
+    chunk = chunk[chunk["cnpj_basico"].notna() & (chunk["cnpj_basico"].str.len() == 8)]
 
     prepared = chunk[CSV_COLUMNS].copy()
-    prepared = prepared[prepared["cnpj_basico"].notna()]
     prepared = prepared.drop_duplicates(subset=["cnpj_basico"])
     return prepared
 

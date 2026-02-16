@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -39,6 +39,7 @@ def _normalize_strings(chunk: pd.DataFrame) -> pd.DataFrame:
 
 
 def _prepare_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    chunk = chunk.copy()
     chunk = _normalize_strings(chunk)
     prepared = chunk[INSERT_COLUMNS].copy()
     prepared = prepared[prepared["cnpj_basico"].notna()]

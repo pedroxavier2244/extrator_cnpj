@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.core.cache import get_cache
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.database import get_db
+from app.middleware.rate_limit import limiter
 from app.schemas.api_responses import BatchCNPJRequest, BatchCNPJResponse, CNPJResponse
 from app.schemas.empresa import EmpresaSchema
 from app.schemas.estabelecimento import EstabelecimentoSchema
@@ -51,12 +52,14 @@ def _cnpj_response_from_rows(
         "Aceita CNPJ com 8 digitos (raiz) ou 14 digitos (completo)."
     ),
 )
+@limiter.limit("60/minute")
 def get_cnpj(
+    request: Request,
     cnpj: str,
     response: Response,
     db: Session = Depends(get_db),
 ) -> CNPJResponse:
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "private, max-age=3600"
 
     cnpj_digits = _only_digits(cnpj)
     if len(cnpj_digits) not in (8, 14):
@@ -182,11 +185,16 @@ def get_cnpj(
     summary="Consultar CNPJs em lote",
     description="Retorna resultados para ate 1000 CNPJs em uma unica chamada.",
 )
+@limiter.limit("10/minute")
 def get_cnpj_batch(
-    request: BatchCNPJRequest,
+    request: Request,
+    payload: BatchCNPJRequest,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> BatchCNPJResponse:
-    total = len(request.cnpjs)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+
+    total = len(payload.cnpjs)
     if total == 0:
         return BatchCNPJResponse(
             resultados={},
@@ -199,7 +207,7 @@ def get_cnpj_batch(
     basico_by_input: dict[str, str] = {}
     nao_encontrados: list[str] = []
 
-    for original in request.cnpjs:
+    for original in payload.cnpjs:
         normalized = _only_digits(original)
         if len(normalized) not in (8, 14):
             nao_encontrados.append(original)
@@ -215,11 +223,11 @@ def get_cnpj_batch(
 
     found_by_basico: dict[str, CNPJResponse] = {}
     for basico, key in cache_keys.items():
-        payload = cache_hits_raw.get(key)
-        if payload is None:
+        payload_item = cache_hits_raw.get(key)
+        if payload_item is None:
             continue
         try:
-            found_by_basico[basico] = CNPJResponse.model_validate(cache.deserialize(payload))
+            found_by_basico[basico] = CNPJResponse.model_validate(cache.deserialize(payload_item))
         except Exception:
             logger.exception("batch.cache_deserialize_failed", cnpj_basico=basico)
 
@@ -234,7 +242,8 @@ def get_cnpj_batch(
     )
 
     if missed_basicos:
-        db.execute(text("CREATE TEMP TABLE _lookup_cnpj (cnpj_basico VARCHAR(8)) ON COMMIT DROP"))
+        db.execute(text("CREATE TEMP TABLE IF NOT EXISTS _lookup_cnpj (cnpj_basico TEXT NOT NULL)"))
+        db.execute(text("TRUNCATE _lookup_cnpj"))
         db.execute(
             text("INSERT INTO _lookup_cnpj (cnpj_basico) VALUES (:cnpj_basico)"),
             [{"cnpj_basico": basico} for basico in missed_basicos],
@@ -326,20 +335,20 @@ def get_cnpj_batch(
 
         cache_to_set: dict[str, str] = {}
         for basico in missed_basicos:
-            response = _cnpj_response_from_rows(
+            response_item = _cnpj_response_from_rows(
                 empresa_by_basico.get(basico),
                 estabelecimentos_by_basico.get(basico, []),
                 socios_by_basico.get(basico, []),
             )
-            if response.empresa is None and not response.estabelecimentos and not response.socios:
+            if response_item.empresa is None and not response_item.estabelecimentos and not response_item.socios:
                 continue
-            found_by_basico[basico] = response
-            cache_to_set[cache.key(basico)] = cache.serialize(response.model_dump(mode="json"))
+            found_by_basico[basico] = response_item
+            cache_to_set[cache.key(basico)] = cache.serialize(response_item.model_dump(mode="json"))
 
         cache.set_many(cache_to_set, settings.CACHE_TTL_SECONDS)
 
     resultados: dict[str, CNPJResponse] = {}
-    for original in request.cnpjs:
+    for original in payload.cnpjs:
         basico = basico_by_input.get(original)
         if basico is None:
             continue
