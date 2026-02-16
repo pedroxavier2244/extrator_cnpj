@@ -4,6 +4,8 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from fastapi.openapi.models import APIKey, APIKeyIn
+from fastapi.security import APIKeyHeader
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -49,6 +51,8 @@ async def lifespan(_: FastAPI):
     logger.info("api.shutdown")
 
 
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="API de consulta de dados publicos de CNPJ da Receita Federal",
@@ -60,7 +64,32 @@ app = FastAPI(
         {"name": "empresas", "description": "Busca de empresas por razao social"},
     ],
     lifespan=lifespan,
+    swagger_ui_init_oauth={},
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+    )
+    schema["components"]["securitySchemes"] = {
+        "APIKeyHeader": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+        }
+    }
+    schema["security"] = [{"APIKeyHeader": []}]
+    app.openapi_schema = schema
+    return schema
+
+app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
