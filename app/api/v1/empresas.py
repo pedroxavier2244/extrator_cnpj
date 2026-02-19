@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.rate_limit import limiter
 from app.schemas.api_responses import EmpresasSearchResponse
-from app.schemas.empresa import EmpresaSchema
+from app.schemas.empresa import EmpresaSearchResultSchema
 
 router = APIRouter(prefix="/empresas", tags=["empresas"])
 
@@ -65,7 +65,7 @@ def search_empresas(
 
     total = int(db.execute(count_sql, {"q": q}).scalar() or 0)
     rows = db.execute(data_sql, {"q": q, "limit": page_size, "offset": offset}).mappings().all()
-    resultados = [EmpresaSchema(**dict(row)) for row in rows]
+    resultados = [EmpresaSearchResultSchema(**dict(row)) for row in rows]
 
     pages = math.ceil(total / page_size) if total > 0 else 0
 

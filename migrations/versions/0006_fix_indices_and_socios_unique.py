@@ -46,22 +46,6 @@ def upgrade() -> None:
             """
         )
 
-        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_estabelecimentos_cnpj_basico")
-        op.execute(
-            """
-            CREATE INDEX CONCURRENTLY idx_estabelecimentos_cnpj_basico
-            ON estabelecimentos (cnpj_basico)
-            """
-        )
-
-        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_socios_cnpj_basico")
-        op.execute(
-            """
-            CREATE INDEX CONCURRENTLY idx_socios_cnpj_basico
-            ON socios (cnpj_basico)
-            """
-        )
-
 
 def downgrade() -> None:
     with op.get_context().autocommit_block():
@@ -78,21 +62,5 @@ def downgrade() -> None:
             """
             CREATE INDEX CONCURRENTLY idx_empresas_razao_social_fts
             ON empresas USING GIN (to_tsvector('portuguese', COALESCE(razao_social, '')))
-            """
-        )
-
-        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_estabelecimentos_cnpj_basico")
-        op.execute(
-            """
-            CREATE INDEX CONCURRENTLY idx_estabelecimentos_cnpj_basico
-            ON estabelecimentos (cnpj_basico)
-            """
-        )
-
-        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_socios_cnpj_basico")
-        op.execute(
-            """
-            CREATE INDEX CONCURRENTLY idx_socios_cnpj_basico
-            ON socios (cnpj_basico)
             """
         )

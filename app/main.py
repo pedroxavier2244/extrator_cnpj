@@ -46,6 +46,11 @@ async def lifespan(_: FastAPI):
     setup_logging()
     set_startup_time()
     get_cache()
+    if not settings.API_KEYS:
+        logger.warning(
+            "api.sem_autenticacao",
+            motivo="API_KEYS nao configurado - todos os endpoints estao publicos",
+        )
     logger.info("api.startup", version=APP_VERSION)
     yield
     logger.info("api.shutdown")

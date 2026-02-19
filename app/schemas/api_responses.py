@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import settings
-from app.schemas.empresa import EmpresaSchema
+from app.schemas.empresa import EmpresaSchema, EmpresaSearchResultSchema
 from app.schemas.estabelecimento import EstabelecimentoSchema
 from app.schemas.socio import SocioSchema
 
@@ -33,7 +33,7 @@ class CNPJResponse(BaseModel):
 
 
 class EmpresasSearchResponse(BaseModel):
-    resultados: list[EmpresaSchema] = Field(default_factory=list)
+    resultados: list[EmpresaSearchResultSchema] = Field(default_factory=list)
     total: int
     page: int
     page_size: int

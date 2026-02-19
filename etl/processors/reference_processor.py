@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# AVISO: modulo utilitario generico - nao chamado diretamente pelo orchestrator.
+# Para usar, chame process_reference_csv() passando target_table e staging_table.
+
 from pathlib import Path
 
 import pandas as pd

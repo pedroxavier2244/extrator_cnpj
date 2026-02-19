@@ -165,18 +165,16 @@ def get_cnpj(
 
     socio_rows = db.execute(socios_sql, {"cnpj_basico": cnpj_basico}).mappings().all()
 
-    empresa = EmpresaSchema(**dict(empresa_row)) if empresa_row else None
-    estabelecimentos = [EstabelecimentoSchema(**dict(row)) for row in estabelecimento_rows]
-    socios = [SocioSchema(**dict(row)) for row in socio_rows]
+    result = _cnpj_response_from_rows(
+        dict(empresa_row) if empresa_row else None,
+        [dict(r) for r in estabelecimento_rows],
+        [dict(r) for r in socio_rows],
+    )
 
-    if empresa is None and not estabelecimentos and not socios:
+    if result.empresa is None and not result.estabelecimentos and not result.socios:
         raise NotFoundError("CNPJ nao encontrado")
 
-    return CNPJResponse(
-        empresa=empresa,
-        estabelecimentos=estabelecimentos,
-        socios=socios,
-    )
+    return result
 
 
 @router.post(

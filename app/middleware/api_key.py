@@ -15,16 +15,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         self.public_paths = {path.strip() for path in public_paths if path and path.strip()}
 
     def _is_public_path(self, path: str) -> bool:
-        if path in self.public_paths:
-            return True
-
-        if path == "/docs" or path.startswith("/docs/"):
-            return True
-        if path == "/redoc" or path.startswith("/redoc/"):
-            return True
-        if path == "/openapi.json":
-            return True
-
+        for public in self.public_paths:
+            if path == public or path.startswith(public.rstrip("/") + "/"):
+                return True
         return False
 
     async def dispatch(self, request: Request, call_next) -> Response:

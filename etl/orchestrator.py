@@ -207,7 +207,11 @@ def process_zip_file(zip_path: Path, force: bool = False) -> int:
     file_hash = calculate_file_hash(zip_path, algorithm=settings.ETL_HASH_ALGORITHM)
 
     if not force and _already_processed(file_hash):
-        _create_importacao(zip_path.name, file_hash, "IGNORED")
+        logger.info(
+            "etl.arquivo_ignorado",
+            arquivo=zip_path.name,
+            motivo="hash_ja_processado",
+        )
         _move_to_processed(zip_path)
         return 0
 
